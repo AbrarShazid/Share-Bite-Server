@@ -17,7 +17,7 @@ admin.initializeApp({
 // middleware
 app.use(
   cors({
-    origin: ["http://localhost:5173", "https://share-bite-a11.vercel.app"],
+    origin: ["http://localhost:5173", "https://share-bite.vercel.app"],
     credentials: true,
   })
 );
@@ -122,7 +122,7 @@ async function run() {
         });
       }
     });
-    
+
     // change status after request
 
     app.patch("/status-change/:id", verifyToken, async (req, res) => {
