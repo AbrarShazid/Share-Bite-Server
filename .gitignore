@@ -1,0 +1,4 @@
+node_modules
+.env
+firebase_admin_serviceKey.json
+.vercel
