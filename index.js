@@ -17,7 +17,7 @@ admin.initializeApp({
 // middleware
 app.use(
   cors({
-    origin: ["http://localhost:5173", "https://share-bite.vercel.app"],
+    origin: ["http://localhost:5173", "https://share-bite-a11.vercel.app"],
     credentials: true,
   })
 );
