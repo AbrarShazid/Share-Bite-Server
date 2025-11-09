@@ -5,10 +5,10 @@ const { MongoClient, ServerApiVersion, ObjectId } = require("mongodb");
 
 const admin = require("firebase-admin");
 
-
-const decoded = Buffer.from(process.env.FB_SERVICE_KEY, 'base64').toString('utf8')
+const decoded = Buffer.from(process.env.FB_SERVICE_KEY, "base64").toString(
+  "utf8"
+);
 const serviceAccount = JSON.parse(decoded);
-
 
 admin.initializeApp({
   credential: admin.credential.cert(serviceAccount),
@@ -22,6 +22,25 @@ app.use(
   })
 );
 app.use(express.json());
+
+
+
+const port = process.env.PORT || 5000;
+
+require("dotenv").config();
+
+const uri = `mongodb+srv://${process.env.DB_USER}:${process.env.DB_PASS}@shazid.sdvbyar.mongodb.net/?retryWrites=true&w=majority&appName=Shazid`;
+
+
+// Create a MongoClient with a MongoClientOptions object to set the Stable API version
+const client = new MongoClient(uri, {
+  serverApi: {
+    version: ServerApiVersion.v1,
+    strict: true,
+    deprecationErrors: true,
+  },
+});
+
 const verifyToken = async (req, res, next) => {
   const authHeader = req.headers?.authorization;
   const token = authHeader.split(" ")[1];
@@ -36,31 +55,202 @@ const verifyToken = async (req, res, next) => {
   }
 };
 
-const port = process.env.PORT || 5000;
+let foodCollection, requestCollection, usersCollection;
 
-require("dotenv").config();
+const requireSuperAdmin = async (req, res, next) => {
+  try {
+    const user = await usersCollection.findOne({ email: req.user.email });
+    if (user?.role !== "super-admin") {
+      return res.status(403).send({ error: "Super admin access required" });
+    }
+    next();
+  } catch (error) {
+    return res.status(403).send({ error: "Forbidden" });
+  }
+};
 
-const uri = `mongodb+srv://${process.env.DB_USER}:${process.env.DB_PASS}@shazid.sdvbyar.mongodb.net/?retryWrites=true&w=majority&appName=Shazid`;
+const requireAdmin = async (req, res, next) => {
+  try {
+    const user = await usersCollection.findOne({ email: req.user.email });
+    if (!['admin', 'super-admin'].includes(user?.role)) {
+      return res.status(403).send({ error: "Admin access required" });
+    }
+    next();
+  } catch (error) {
+    return res.status(403).send({ error: "Forbidden" });
+  }
+};
 
-// Create a MongoClient with a MongoClientOptions object to set the Stable API version
-const client = new MongoClient(uri, {
-  serverApi: {
-    version: ServerApiVersion.v1,
-    strict: true,
-    deprecationErrors: true,
-  },
-});
+// Check if user is banned
+const checkBanned = async (req, res, next) => {
+  try {
+    const user = await usersCollection.findOne({ email: req.user.email });
+    if (user?.isBanned) {
+      return res.status(403).send({ error: 'Your account has been banned' });
+    }
+    next();
+  } catch (error) {
+    return res.status(403).send({ error: 'Forbidden' });
+  }
+};
+
+
 
 async function run() {
-  try {
-    // Connect the client to the server	(optional starting in v4.7)
-    // await client.connect();
+    foodCollection = client.db("ShareBite").collection("foods");
+   requestCollection = client.db("ShareBite").collection("foodRequest");
+   usersCollection = client.db("ShareBite").collection("users");
 
-    const foodCollection = client.db("ShareBite").collection("foods");
-    const requestCollection = client.db("ShareBite").collection("foodRequest");
+    // Save user to database (updated with photoURL)
+    app.post("/save-user", verifyToken, async (req, res) => {
+      try {
+        const { email, name, photoURL } = req.body;
+
+        // Check if user already exists
+        const existingUser = await usersCollection.findOne({ email });
+
+        if (existingUser) {
+          return res.send(existingUser);
+        }
+
+        // Create new user with default role
+        const newUser = {
+          email,
+          name,
+          photoURL: photoURL || "",
+          role: "user", 
+          createdAt: new Date(),
+          isBanned: false,
+        };
+
+        const result = await usersCollection.insertOne(newUser);
+        res.send({ ...newUser, _id: result.insertedId });
+      } catch (error) {
+        res.status(500).send({ error: "Failed to save user" });
+      }
+    });
+
+    // // Get user data by email
+    // app.get("/user/:email", verifyToken, async (req, res) => {
+    //   try {
+    //     const email = req.params.email;
+    //     const user = await usersCollection.findOne({ email });
+        
+    //     if (!user) {
+    //       return res.status(404).send({ error: "User not found" });
+    //     }
+        
+    //     res.send(user);
+    //   } catch (error) {
+    //     res.status(500).send({ error: "Failed to fetch user data" });
+    //   }
+    // });
+
+  
+
+    // Super Admin APIs
+    app.get("/admin/all-users", verifyToken, requireSuperAdmin, async (req, res) => {
+      try {
+        const users = await usersCollection.find({}).toArray();
+        res.send(users);
+      } catch (error) {
+        res.status(500).send({ error: "Failed to fetch users" });
+      }
+    });
+
+    app.get("/admin/admins", verifyToken, requireSuperAdmin, async (req, res) => {
+      try {
+        const admins = await usersCollection.find({ 
+          role: { $in: ["admin", "super-admin"] } 
+        }).toArray();
+        res.send(admins);
+      } catch (error) {
+        res.status(500).send({ error: "Failed to fetch admins" });
+      }
+    });
+
+    app.patch("/admin/update-role", verifyToken, requireSuperAdmin, async (req, res) => {
+      try {
+        const { userId, newRole } = req.body;
+        
+        if (!["user", "admin"].includes(newRole)) {
+          return res.status(400).send({ error: "Invalid role" });
+        }
+        
+        const result = await usersCollection.updateOne(
+          { _id: new ObjectId(userId) },
+          { $set: { role: newRole } }
+        );
+        
+        res.send(result);
+      } catch (error) {
+        res.status(500).send({ error: "Failed to update user role" });
+      }
+    });
+
+    // Admin APIs
+    app.patch("/admin/ban-user", verifyToken, requireAdmin, async (req, res) => {
+      try {
+        const { userId } = req.body;
+        
+        const result = await usersCollection.updateOne(
+          { _id: new ObjectId(userId) },
+          { 
+            $set: { 
+              isBanned: true,
+              bannedBy: req.user.email,
+              bannedAt: new Date()
+            } 
+          }
+        );
+        
+        res.send(result);
+      } catch (error) {
+        res.status(500).send({ error: "Failed to ban user" });
+      }
+    });
+
+    app.patch("/admin/unban-user", verifyToken, requireAdmin, async (req, res) => {
+      try {
+        const { userId } = req.body;
+        
+        const result = await usersCollection.updateOne(
+          { _id: new ObjectId(userId) },
+          { 
+            $set: { 
+              isBanned: false,
+              bannedBy: null,
+              bannedAt: null
+            } 
+          }
+        );
+        
+        res.send(result);
+      } catch (error) {
+        res.status(500).send({ error: "Failed to unban user" });
+      }
+    });
+
+    app.delete("/admin/foods/:id", verifyToken, requireAdmin, async (req, res) => {
+      try {
+        const id = req.params.id;
+        const result = await foodCollection.deleteOne({ _id: new ObjectId(id) });
+        res.send(result);
+      } catch (error) {
+        res.status(500).send({ error: "Failed to delete food item" });
+      }
+    });
+
+
+
+
+  
+
+
+    // ------------------------------
 
     // api
-    app.post("/foods", verifyToken, async (req, res) => {
+    app.post("/foods", verifyToken,checkBanned, async (req, res) => {
       const food = req.body;
       const result = await foodCollection.insertOne(food);
       res.send(result);
@@ -118,7 +308,7 @@ async function run() {
       } catch (error) {
         res.status(500).send({
           error: "Internal server error",
-          details: error.message
+          details: error.message,
         });
       }
     });
