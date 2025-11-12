@@ -277,6 +277,44 @@ async function run() {
 
     const foodCollection = client.db("ShareBite").collection("foods");
     const requestCollection = client.db("ShareBite").collection("foodRequest");
+    const usersCollection = client.db("ShareBite").collection("users");
+
+
+
+
+
+
+
+
+
+  //save user in mongodb :
+
+  app.post("/save-user", async (req, res) => {
+  try {
+    const userData = req.body;
+    
+    // Check if user already exists
+    const existingUser = await userCollection.findOne({ email: userData.email });
+    
+    if (existingUser) {
+      return res.status(200).send({ message: "User already exists", user: existingUser });
+    }
+    
+    // Add additional fields
+    userData.createdAt = new Date();
+    userData.role = "user"; // default role
+    
+    const result = await userCollection.insertOne(userData);
+    res.send(result);
+  } catch (error) {
+    console.error("Error saving user:", error);
+    res.status(500).send({ error: "Failed to save user to database" });
+  }
+});
+
+
+
+
 
     // api
     app.post("/foods", verifyToken, async (req, res) => {
