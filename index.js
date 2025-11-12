@@ -294,7 +294,7 @@ async function run() {
     const userData = req.body;
     
     // Check if user already exists
-    const existingUser = await userCollection.findOne({ email: userData.email });
+    const existingUser = await usersCollection.findOne({ email: userData.email });
     
     if (existingUser) {
       return res.status(200).send({ message: "User already exists", user: existingUser });
@@ -304,7 +304,7 @@ async function run() {
     userData.createdAt = new Date();
     userData.role = "user"; // default role
     
-    const result = await userCollection.insertOne(userData);
+    const result = await usersCollection.insertOne(userData);
     res.send(result);
   } catch (error) {
     console.error("Error saving user:", error);
