@@ -196,17 +196,27 @@ admin.initializeApp({
 });
 
 
+
 const verifyToken = async (req, res, next) => {
   const authHeader = req.headers?.authorization;
-  const token = authHeader.split(" ")[1];
-  if (!token) return res.status(401).send("Unauthorized");
+  if (!authHeader) {
+    return res.status(401).send({ error: "Unauthorized: missing Authorization header" });
+  }
+
+  const parts = authHeader.split(" ");
+  if (parts.length !== 2 || parts[0] !== "Bearer") {
+    return res.status(401).send({ error: "Unauthorized: malformed Authorization header" });
+  }
+
+  const token = parts[1];
 
   try {
     const decoded = await admin.auth().verifyIdToken(token);
     req.user = decoded;
     next();
   } catch (err) {
-    return res.status(403).send("Forbidden");
+    console.error("verifyToken error:", err);
+    return res.status(403).send({ error: "Forbidden: invalid token" });
   }
 };
 
@@ -264,6 +274,30 @@ async function run() {
     console.error("Error saving user:", error);
     res.status(500).send({ error: "Failed to save user to database" });
   }
+});
+
+//role of a user 
+app.get("/user/role/:email", verifyToken, async (req, res) => {
+    try {
+        const email = req.params.email;
+       
+        if (req.user.email !== email) {
+            return res.status(403).send({ error: "Forbidden access" });
+        }
+
+        const user = await usersCollection.findOne({ email });
+
+        if (!user) {
+            return res.status(404).send({ error: "User not found" });
+        }
+        
+        // The default role you set in /save-user is 'user'
+        res.send({ role: user.role }); 
+
+    } catch (error) {
+        console.error("Error fetching user role:", error);
+        res.status(500).send({ error: "Failed to fetch user role" });
+    }
 });
 
 
