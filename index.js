@@ -256,7 +256,7 @@ async function run() {
     // Add additional fields
     userData.createdAt = new Date();
     userData.role = "user"; 
-    userData.isBan=false,
+    userData.isBan=false;
     
     const result = await usersCollection.insertOne(userData);
     res.send(result);
