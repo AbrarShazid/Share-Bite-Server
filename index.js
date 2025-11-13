@@ -1,23 +1,4 @@
 
-// const verifyToken = async (req, res, next) => {
-//   try {
-//     const authHeader = req.headers && req.headers.authorization;
-//     if (!authHeader) return res.status(401).send('Unauthorized: no token');
-
-//     const parts = authHeader.split(' ');
-//     if (parts.length !== 2) return res.status(401).send('Unauthorized: invalid token');
-
-//     const token = parts[1];
-//     const decoded = await admin.auth().verifyIdToken(token);
-//     req.user = decoded;
-//     next();
-//   } catch (err) {
-//     console.error('verifyToken error:', err);
-//     return res.status(403).send('Forbidden');
-//   }
-// };
-
-// let foodCollection, requestCollection, usersCollection;
 
 // const requireSuperAdmin = async (req, res, next) => {
 //   try {
@@ -65,34 +46,6 @@
 //    requestCollection = client.db("ShareBite").collection("foodRequest");
 //    usersCollection = client.db("ShareBite").collection("users");
 
-//     // Save user to database (updated with photoURL)
-//     app.post("/save-user", verifyToken, async (req, res) => {
-//       try {
-//         const { email, name, photoURL } = req.body;
-
-//         // Check if user already exists
-//         const existingUser = await usersCollection.findOne({ email });
-
-//         if (existingUser) {
-//           return res.send(existingUser);
-//         }
-
-//         // Create new user with default role
-//         const newUser = {
-//           email,
-//           name,
-//           photoURL: photoURL || "",
-//           role: "user", 
-//           createdAt: new Date(),
-//           isBanned: false,
-//         };
-
-//         const result = await usersCollection.insertOne(newUser);
-//         res.send({ ...newUser, _id: result.insertedId });
-//       } catch (error) {
-//         res.status(500).send({ error: "Failed to save user" });
-//       }
-//     });
 
 //     // // Get user data by email
 //     // app.get("/user/:email", verifyToken, async (req, res) => {
@@ -302,7 +255,8 @@ async function run() {
     
     // Add additional fields
     userData.createdAt = new Date();
-    userData.role = "user"; // default role
+    userData.role = "user"; 
+    userData.isBan=false,
     
     const result = await usersCollection.insertOne(userData);
     res.send(result);
