@@ -1,123 +1,3 @@
-// const requireSuperAdmin = async (req, res, next) => {
-//   try {
-//     const user = await usersCollection.findOne({ email: req.user.email });
-//     if (user?.role !== "super-admin") {
-//       return res.status(403).send({ error: "Super admin access required" });
-//     }
-//     next();
-//   } catch (error) {
-//     return res.status(403).send({ error: "Forbidden" });
-//   }
-// };
-
-// // Check if user is banned
-// const checkBanned = async (req, res, next) => {
-//   try {
-//     const user = await usersCollection.findOne({ email: req.user.email });
-//     if (user?.isBanned) {
-//       return res.status(403).send({ error: 'Your account has been banned' });
-//     }
-//     next();
-//   } catch (error) {
-//     return res.status(403).send({ error: 'Forbidden' });
-//   }
-// };
-
-// async function run() {
-
-//   try{
-//     foodCollection = client.db("ShareBite").collection("foods");
-//    requestCollection = client.db("ShareBite").collection("foodRequest");
-//    usersCollection = client.db("ShareBite").collection("users");
-
-//     // // Get user data by email
-//     // app.get("/user/:email", verifyToken, async (req, res) => {
-//     //   try {
-//     //     const email = req.params.email;
-//     //     const user = await usersCollection.findOne({ email });
-
-//     //     if (!user) {
-//     //       return res.status(404).send({ error: "User not found" });
-//     //     }
-
-//     //     res.send(user);
-//     //   } catch (error) {
-//     //     res.status(500).send({ error: "Failed to fetch user data" });
-//     //   }
-//     // });
-
-//     app.patch("/admin/update-role", verifyToken, requireSuperAdmin, async (req, res) => {
-//       try {
-//         const { userId, newRole } = req.body;
-
-//         if (!["user", "admin"].includes(newRole)) {
-//           return res.status(400).send({ error: "Invalid role" });
-//         }
-
-//         const result = await usersCollection.updateOne(
-//           { _id: new ObjectId(userId) },
-//           { $set: { role: newRole } }
-//         );
-
-//         res.send(result);
-//       } catch (error) {
-//         res.status(500).send({ error: "Failed to update user role" });
-//       }
-//     });
-
-//     // Admin APIs
-//     app.patch("/admin/ban-user", verifyToken, requireAdmin, async (req, res) => {
-//       try {
-//         const { userId } = req.body;
-
-//         const result = await usersCollection.updateOne(
-//           { _id: new ObjectId(userId) },
-//           {
-//             $set: {
-//               isBanned: true,
-//               bannedBy: req.user.email,
-//               bannedAt: new Date()
-//             }
-//           }
-//         );
-
-//         res.send(result);
-//       } catch (error) {
-//         res.status(500).send({ error: "Failed to ban user" });
-//       }
-//     });
-
-//     app.patch("/admin/unban-user", verifyToken, requireAdmin, async (req, res) => {
-//       try {
-//         const { userId } = req.body;
-
-//         const result = await usersCollection.updateOne(
-//           { _id: new ObjectId(userId) },
-//           {
-//             $set: {
-//               isBanned: false,
-//               bannedBy: null,
-//               bannedAt: null
-//             }
-//           }
-//         );
-
-//         res.send(result);
-//       } catch (error) {
-//         res.status(500).send({ error: "Failed to unban user" });
-//       }
-//     });
-
-//     app.delete("/admin/foods/:id", verifyToken, requireAdmin, async (req, res) => {
-//       try {
-//         const id = req.params.id;
-//         const result = await foodCollection.deleteOne({ _id: new ObjectId(id) });
-//         res.send(result);
-//       } catch (error) {
-//         res.status(500).send({ error: "Failed to delete food item" });
-//       }
-//     });
-
 const express = require("express");
 const cors = require("cors");
 const dotenv = require("dotenv");
@@ -144,29 +24,6 @@ const serviceAccount = JSON.parse(decoded);
 admin.initializeApp({
   credential: admin.credential.cert(serviceAccount),
 });
-
-// const verifyToken = async (req, res, next) => {
-//   const authHeader = req.headers?.authorization;
-//   if (!authHeader) {
-//     return res.status(401).send({ error: "Unauthorized: missing Authorization header" });
-//   }
-
-//   const parts = authHeader.split(" ");
-//   if (parts.length !== 2 || parts[0] !== "Bearer") {
-//     return res.status(401).send({ error: "Unauthorized: malformed Authorization header" });
-//   }
-
-//   const token = parts[1];
-
-//   try {
-//     const decoded = await admin.auth().verifyIdToken(token);
-//     req.user = decoded;
-//     next();
-//   } catch (err) {
-//     console.error("verifyToken error:", err);
-//     return res.status(403).send({ error: "Forbidden: invalid token" });
-//   }
-// };
 
 const verifyToken = async (req, res, next) => {
   const authHeader = req.headers?.authorization;
@@ -336,7 +193,6 @@ async function run() {
     );
 
     //make admin from user
-
     app.patch(
       "/admin/make-admin/:id",
       verifyToken,
@@ -371,9 +227,6 @@ async function run() {
         }
       }
     );
-
-
-
 
 // GET all admins accessible to super-admins
 app.get("/admin/all-admins", verifyToken, requireSuperAdmin, async (req, res) => {
@@ -412,19 +265,7 @@ app.patch("/admin/demote/:id", verifyToken, requireSuperAdmin, async (req, res) 
   }
 });
 
-
-
-
-
-
-
-
-
-
-
-
     //for dashboard
-
     app.get("/dashboard-data", verifyToken, requireAdmin, async (req, res) => {
       const total_User = await usersCollection.countDocuments({ role: "user" });
       const total_Admin = await usersCollection.countDocuments({
@@ -440,25 +281,6 @@ app.patch("/admin/demote/:id", verifyToken, requireSuperAdmin, async (req, res) 
         total_Req,
       });
     });
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 
 
     // api
