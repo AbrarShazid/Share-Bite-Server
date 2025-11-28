@@ -354,7 +354,13 @@ async function run() {
           food.createdAt = new Date();
 
           const result = await foodCollection.insertOne(food);
-          res.send(result);
+
+          food._id = result.insertedId;
+
+          res.send({
+            success: true,
+            data: food,
+          });
         } catch (err) {
           console.error("Error in /foods upload:", err);
           res
