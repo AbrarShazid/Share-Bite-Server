@@ -2,6 +2,9 @@ const express = require("express");
 const cors = require("cors");
 const dotenv = require("dotenv");
 const admin = require("firebase-admin");
+const cloudinary = require("cloudinary").v2;
+const multer = require("multer");
+const streamifier = require("streamifier");
 const { MongoClient, ServerApiVersion, ObjectId } = require("mongodb");
 dotenv.config();
 
@@ -19,6 +22,33 @@ app.use(express.json());
 const decoded = Buffer.from(process.env.FB_SERVICE_KEY, "base64").toString(
   "utf8"
 );
+
+cloudinary.config({
+  cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
+  api_key: process.env.CLOUDINARY_API_KEY,
+  api_secret: process.env.CLOUDINARY_API_SECRET,
+});
+
+// Setup Cloudinary Storage for Multer
+const upload = multer({ storage: multer.memoryStorage() });
+function uploadBufferToCloudinary(buffer, folder = "ShareBite_Food_Images") {
+  return new Promise((resolve, reject) => {
+    const uploadStream = cloudinary.uploader.upload_stream(
+      {
+        folder,
+        transformation: [{ width: 500, height: 500, crop: "limit" }],
+        allowed_formats: ["jpg", "png", "webp", "jpeg"],
+      },
+      (error, result) => {
+        if (error) return reject(error);
+        resolve(result);
+      }
+    );
+
+    streamifier.createReadStream(buffer).pipe(uploadStream);
+  });
+}
+
 const serviceAccount = JSON.parse(decoded);
 
 admin.initializeApp({
@@ -228,42 +258,62 @@ async function run() {
       }
     );
 
-// GET all admins accessible to super-admins
-app.get("/admin/all-admins", verifyToken, requireSuperAdmin, async (req, res) => {
-  try {
-    const admins = await usersCollection
-      .find({ role: "admin" })
-      .toArray();
-    res.send(admins);
-  } catch (error) {
-    console.error("GET /admin/admins error:", error);
-    res.status(500).send({ error: "Failed to fetch admins" });
-  }
-});
-
-// demote admin -> user 
-app.patch("/admin/demote/:id", verifyToken, requireSuperAdmin, async (req, res) => {
-  try {
-    const id = req.params.id;
-    if (!id) return res.status(400).send({ error: "User id required" });
-
-    const target = await usersCollection.findOne({ _id: new ObjectId(id) });
-    if (!target) return res.status(404).send({ error: "Target user not found" });
-    if (target.role === "admin") {
-      const result = await usersCollection.updateOne(
-      { _id: new ObjectId(id) },
-      { $set: { role: "user" } }
+    // GET all admins accessible to super-admins
+    app.get(
+      "/admin/all-admins",
+      verifyToken,
+      requireSuperAdmin,
+      async (req, res) => {
+        try {
+          const admins = await usersCollection
+            .find({ role: "admin" })
+            .toArray();
+          res.send(admins);
+        } catch (error) {
+          console.error("GET /admin/admins error:", error);
+          res.status(500).send({ error: "Failed to fetch admins" });
+        }
+      }
     );
 
-    res.send({ success: result.modifiedCount > 0, modifiedCount: result.modifiedCount, result });
-    }
- return res.send({ success: false, modifiedCount: 0, message: "Already a user" });
-   
-  } catch (error) {
-    console.error("PATCH /admin/demote/:id error:", error);
-    res.status(500).send({ error: "Failed to demote user" });
-  }
-});
+    // demote admin -> user
+    app.patch(
+      "/admin/demote/:id",
+      verifyToken,
+      requireSuperAdmin,
+      async (req, res) => {
+        try {
+          const id = req.params.id;
+          if (!id) return res.status(400).send({ error: "User id required" });
+
+          const target = await usersCollection.findOne({
+            _id: new ObjectId(id),
+          });
+          if (!target)
+            return res.status(404).send({ error: "Target user not found" });
+          if (target.role === "admin") {
+            const result = await usersCollection.updateOne(
+              { _id: new ObjectId(id) },
+              { $set: { role: "user" } }
+            );
+
+            res.send({
+              success: result.modifiedCount > 0,
+              modifiedCount: result.modifiedCount,
+              result,
+            });
+          }
+          return res.send({
+            success: false,
+            modifiedCount: 0,
+            message: "Already a user",
+          });
+        } catch (error) {
+          console.error("PATCH /admin/demote/:id error:", error);
+          res.status(500).send({ error: "Failed to demote user" });
+        }
+      }
+    );
 
     //for dashboard
     app.get("/dashboard-data", verifyToken, requireAdmin, async (req, res) => {
@@ -282,13 +332,37 @@ app.patch("/admin/demote/:id", verifyToken, requireSuperAdmin, async (req, res) 
       });
     });
 
-
     // api
-    app.post("/foods", verifyToken, async (req, res) => {
-      const food = req.body;
-      const result = await foodCollection.insertOne(food);
-      res.send(result);
-    });
+    app.post(
+      "/foods",
+      verifyToken,
+      upload.single("image"),
+      async (req, res) => {
+        try {
+          const food = req.body;
+
+          if (!req.file || !req.file.buffer) {
+            return res.status(400).send({ error: "Image file is required." });
+          }
+
+          // upload buffer to Cloudinary
+          const uploadResult = await uploadBufferToCloudinary(req.file.buffer);
+          const imgUrl = uploadResult.secure_url || uploadResult.url;
+
+          // attach image URL to the food document
+          food.img = imgUrl;
+          food.createdAt = new Date();
+
+          const result = await foodCollection.insertOne(food);
+          res.send(result);
+        } catch (err) {
+          console.error("Error in /foods upload:", err);
+          res
+            .status(500)
+            .send({ error: "Failed to upload image or save food." });
+        }
+      }
+    );
 
     // 6 food item for feature
 
@@ -398,8 +472,8 @@ app.patch("/admin/demote/:id", verifyToken, requireSuperAdmin, async (req, res) 
         // allow delete if requester is owner or admin/super-admin
         let isOwner = false;
 
-        if(food.userEmail===requesterEmail){
-          isOwner=true
+        if (food.userEmail === requesterEmail) {
+          isOwner = true;
         }
         const isAdmin = ["admin", "super-admin"].includes(requesterRole);
 
@@ -427,7 +501,7 @@ app.patch("/admin/demote/:id", verifyToken, requireSuperAdmin, async (req, res) 
         res.status(500).send({ error: "Failed to delete food" });
       }
     });
-   
+
     // update data fully
 
     app.put("/foods/:id", verifyToken, async (req, res) => {
